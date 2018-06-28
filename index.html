@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <script src="https://ajax.googleapis.com/ajax/libs/jquery/3.2.1/jquery.min.js"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/4.7.0/css/font-awesome.min.css">
+    <style>
+    #map {
+      height: 80vh;
+      width: 100%;
+    }
+    #Usuario{
+      width:50%;
+      float:left;
+    }
+
+    #Identificacao{
+      width:40%;
+      float:right;
+    }
+
+    #Identificacao h3{
+      padding: 0px;
+      margin: 0px;
+      text-align: right;
+    }
+
+    #pac-input{
+      width:  320px;
+    }
+
+    body{
+      width:1024px;
+      padding:  1%;
+      height:   100vh;
+      display:  table-cell; 
+      background-color:   white;
+    }
+
+    html{
+      display:table ;
+      margin: auto;
+      background-color:   black;
+    }
+
+    </style>
+
+  </head>
+  <body>
+    <div id="topo">
+      <form id="Usuario">
+      <input id="pac-input" class="controls" type="text" placeholder="Buscar Endere&ccedil;o" onkeypress="Buscar(event)"><br><br>
+      <input id="Onibus" type="checkbox">&Ocirc;nibus em movimento
+      <input id="Paradas" type="checkbox">Paradas de &ocirc;nibus
+      &nbsp;<i id="Atualizar" class="fa fa-repeat" onclick="atualizarOnibus()" visibility="hidden"></i>
+      </form>
+    
+      <div id="Identificacao">
+        <h3>Daniel Rezina - 9360749<br>Eduardo Pontes - 9360610<br>Raul Gioielli - 8920950</h3>
+      </div>
+    </div>
+    <div id="map"></div>
+
+    <script>
+      //Variaveis globais
+      var paradas = [];
+      var onibus = [];
+      var map;
+
+      //Funcao para buscar localizacao digitada pelo usuario na caixa de busca quando o mesmo aperta enter.
+      function Buscar(e) {
+        if(e.keyCode == 13){
+          e.preventDefault();
+
+          var resultado = e.text;
+          var geocoder = new google.maps.Geocoder();
+          geocoder.geocode({"address":resultado }, function(results, status) {
+              if (status == google.maps.GeocoderStatus.OK) {
+                  var lat = results[0].geometry.location.lat(),
+                  lng = results[0].geometry.location.lng(),
+                  placeName = results[0].address_components[0].long_name,
+                  latlng = new google.maps.LatLng(lat, lng);
+
+                  moveMarker(placeName, latlng);
+                  $("input").val(resultado);
+              }
+          });  
+
+          if(document.getElementById('map').style.visibility == "hidden"){
+            document.getElementById('map').style.visibility = "visible";
+            document.getElementById('Onibus').disabled = false;
+            document.getElementById('Paradas').disabled = false;
+          }
+        }
+      }
+
+      //Funcao para carregar as paradas de onibus que estao no banco de dados para utiliza-las quando o usuario selecionar a opcao.
+      function carregarParadas(){
+        var xmlhttp = new XMLHttpRequest();
+        var url = "paradas.php";
+
+        xmlhttp.onreadystatechange = function() {
+          if (this.readyState == 4 && this.status == 200) {
+              var myArr = JSON.parse(this.responseText);
+              myFunction(myArr);
+          }
+        };
+        xmlhttp.open("GET", url, true);
+        xmlhttp.send();
+
+        function myFunction(arr) {
+            console.log("Comecou a carregar");
+            var out = "";
+            var i;
+            for(i = 0; i < arr.length; i++) {
+                paradas[i] = new google.maps.Marker({
+                  position: {lat: Number(arr[i].latitude),lng: Number(arr[i].longitude)},
+                  icon: "bus_stop_icon.png"
+                });
+
+                var infowindow = new google.maps.InfoWindow();
+
+                google.maps.event.addListener(paradas[i],'click', (function(marker,content,infowindow){ 
+                    return function() {
+                        infowindow.setContent(content);
+                        infowindow.open(map,marker);
+                    };
+                })(paradas[i],arr[i].descricao,infowindow));  
+            }
+            
+            document.getElementById('Paradas').disabled = document.getElementById('Onibus').disabled;
+            console.log("Carregado");
+        }
+      }
+
+      //Funcao para carregar a ultima posicao guardada no banco de dados dos onibus. E utilizada quando o usuario marca a opcao ou atualiza as informacoes na tela.
+      function carregarOnibus(){
+        var xmlhttp = new XMLHttpRequest();
+        //var url = "onibusTela.php?lat=" + map.getCenter().lat() + "&lng=" + map.getCenter().lng();
+        var url = "onibus.php";
+        console.log(url);
+
+        xmlhttp.onreadystatechange = function() {
+          if (this.readyState == 4 && this.status == 200) {
+              var myArr = JSON.parse(this.responseText);
+              myFunction(myArr);
+          }
+        };
+        xmlhttp.open("GET", url, true);
+        xmlhttp.send();
+
+        function myFunction(arr) {
+            var out = "";
+            var i;
+            for(i = 0; i < arr.length; i++) {
+                onibus[i] = new google.maps.Marker({
+                  position: {lat: Number(arr[i].latitude),lng: Number(arr[i].longitude)},
+                  icon: "icon_bus.png"
+                });
+
+                var infowindow = new google.maps.InfoWindow();
+
+                google.maps.event.addListener(onibus[i],'click', (function(marker,content,infowindow){ 
+                    return function() {
+                        infowindow.setContent(content);
+                        infowindow.open(map,marker);
+                    };
+                })(onibus[i],arr[i].codigo + " - " + arr[i].letreiro,infowindow));
+                onibus[i].setMap(map);
+            }
+            google.maps.event.trigger(map, 'resize')
+        }
+
+        /*var xmlhttp2 = new XMLHttpRequest();
+        var url2 = "onibusEscondido.php?lat=" + map.getCenter().lat() + "&lng=" + map.getCenter().lng();
+
+        xmlhttp2.onreadystatechange = function() {
+          if (this.readyState == 4 && this.status == 200) {
+              var myArr2 = JSON.parse(this.responseText);
+              myFunction(myArr2);
+          }
+        };
+        xmlhttp2.open("GET", url2, true);
+        xmlhttp2.send();*/
+      }
+
+      //Funcao que controla o evento de marcar/desmarcar o checkbox das paradas de onibus.
+      $("#Paradas").change(function() {
+          if(this.checked) {
+            mostrarParadas();
+          }else{
+            esconderParadas();
+          }
+      });
+
+      //Funcao que controla o evento de marcar/desmarcar o checkbox das posicoes de onibus.
+      $("#Onibus").change(function() {
+          if(this.checked) {
+            mostrarOnibus();
+            $("#Atualizar").show();
+          }else{
+            esconderOnibus();
+            $("#Atualizar").hide();
+          }
+      });
+
+      //Funcao que percorre o array de paradas para exibi-las no mapa.
+      function mostrarParadas(){
+        for(i=0;i<paradas.length;i++){
+          paradas[i].setMap(map);
+        }
+        google.maps.event.trigger(map,'resize')
+      }
+
+      //Funcao que percorre o array de paradas para remove-las do mapa(Mantem elas em memoria para evitar requisicoes desnecessarias).
+      function esconderParadas(){
+        for(i=0;i<paradas.length;i++){
+          paradas[i].setMap(null);
+        }
+        google.maps.event.trigger(map,'resize')
+      }
+
+      //Funcao que exibe as posicoes dos onibus na tela. Recarrega sempre o array de onibus para exibir a posicao mais recente.
+      function mostrarOnibus(){
+        carregarOnibus();
+        google.maps.event.trigger(map,'resize')
+      }
+
+      //Funcao que esconde as posicoes dos onibus da tela. Limpa o array de onibus uma vez que ele tera de ser recarregado para que seja exibida sempre a posicao mais recente.
+      function esconderOnibus(){
+        for(i=0;i<onibus.length;i++){
+          onibus[i].setMap(null);
+        }
+        onibus.length = 0;
+        google.maps.event.trigger(map,'resize')
+      }
+
+      //Funcao que limpa as posicoes de onibus da tela e coloca as novas posicoes.
+      function atualizarOnibus(){
+        esconderOnibus();
+        mostrarOnibus();
+      }
+
+      //Funcao que carrega o mapa e define varias outras coisinhas referentes ao uso do mapa pela aplicacao.
+      function initAutocomplete() {
+        //Reiniciar o formulario.
+        $("#Paradas").prop("checked", false);
+        $("#Onibus").prop("checked", false);
+        $("#Atualizar").hide();
+
+        //Arrumar o tamanho do mapa para ocupar o maior espaco possivel sem ultrapassar o tamanho da tela do navegador. Aparece duas vezes, uma delas e para acertar o tamanho quando a janela e criada(Nao ocorre resize nesse momento).
+        window.addEventListener('resize', function(event){
+          var windowHeight;
+
+          if (typeof window.innerWidth != 'undefined')
+          {
+              windowHeight = window.innerHeight;
+          }
+          // IE6 in standards compliant mode (i.e. with a valid doctype as the first 
+          // line in the document)
+          else if (typeof document.documentElement != 'undefined'
+                  && typeof document.documentElement.clientWidth != 'undefined' 
+                  && document.documentElement.clientWidth != 0)
+          {
+              windowHeight = document.documentElement.clientHeight;
+          }
+          // older versions of IE
+          else
+          {
+              windowHeight = document.getElementsByTagName('body')[0].clientHeight;
+          }
+
+          document.getElementById("map").style.height = (windowHeight - 100) + "px";
+        });
+
+        var windowHeight;
+
+        if (typeof window.innerWidth != 'undefined')
+        {
+            windowHeight = window.innerHeight;
+        }
+        // IE6 in standards compliant mode (i.e. with a valid doctype as the first 
+        // line in the document)
+        else if (typeof document.documentElement != 'undefined'
+                && typeof document.documentElement.clientWidth != 'undefined' 
+                && document.documentElement.clientWidth != 0)
+        {
+            windowHeight = document.documentElement.clientHeight;
+        }
+        // older versions of IE
+        else
+        {
+            windowHeight = document.getElementsByTagName('body')[0].clientHeight;
+        }
+
+        //Inicializacao do mapa.
+        document.getElementById("map").style.height = (windowHeight - 100) + "px";
+
+        map = new google.maps.Map(document.getElementById('map'), {
+          center: {lat: -23.5489, lng: -46.6388},
+          zoom: 15,
+          mapTypeId: 'roadmap',
+          disableDefaultUI: true,
+          maxZoom: 17,
+          minZoom: 14
+        });
+
+        // Link da caixa de busca com o motor do google.
+        var input = document.getElementById('pac-input');
+        var searchBox = new google.maps.places.SearchBox(input);
+
+        // Enviesa a caixa de busca para mostrar resultados mais proximos do local sendo visto no mapa.
+        map.addListener('bounds_changed', function() {
+          searchBox.setBounds(map.getBounds());
+        });
+
+        var markers = [];
+        // Escuta a caixa de texto para trazer mais informacoes do local selecionado e mostra o mapa depois que o usuario selecionou um endereco pela primeira vez, caso nao tivesse gps para definir uma posicao inicial.
+        searchBox.addListener('places_changed', function() {
+          var places = searchBox.getPlaces();
+
+          if (places.length == 0) {
+            return;
+          }
+
+          // For each place, get the icon, name and location.
+          var bounds = new google.maps.LatLngBounds();
+          places.forEach(function(place) {
+            if (!place.geometry) {
+              console.log("Returned place contains no geometry");
+              return;
+            }
+
+            if (place.geometry.viewport) {
+              // Only geocodes have viewport.
+              bounds.union(place.geometry.viewport);
+            } else {
+              bounds.extend(place.geometry.location);
+            }
+          });
+          map.fitBounds(bounds);
+
+          if(document.getElementById('map').style.visibility == "hidden"){
+              document.getElementById('map').style.visibility = "visible";
+              document.getElementById('Onibus').disabled = false;
+              document.getElementById('Paradas').disabled = false;
+            }
+        });
+
+
+        //Centraliza o mapa utilizando gps.
+
+        if (navigator.geolocation) {
+          navigator.geolocation.getCurrentPosition(function(position) {
+            var pos = {
+              lat: position.coords.latitude,
+              lng: position.coords.longitude
+            };
+
+            map.setCenter(pos);
+          }, function(){
+            document.getElementById('map').style.visibility = "hidden";
+            document.getElementById('Onibus').disabled = true;
+            document.getElementById('Paradas').disabled = true;
+          });
+        } else {
+          // Browser doesn't support Geolocation
+          document.getElementById('map').style.visibility = "hidden";
+          document.getElementById('Onibus').disabled = true;
+          document.getElementById('Paradas').disabled = true;
+        }
+
+        document.getElementById('Paradas').disabled = true;
+        carregarParadas();
+      }
+    </script>
+    <!--token para utilizar a api do google maps-->
+    <script async defer src="https://maps.googleapis.com/maps/api/js?key=AIzaSyDbOmJBHPLzIdoZq_NyuOu55SO2QkWa2As &callback=initAutocomplete&libraries=places&language=pt&region=BR" type="text/javascript"></script>
+  </body>
+</html>
